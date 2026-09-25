@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
-"""Sticker catalog and image content for the remote MCP service."""
-import base64
+"""Sticker catalog and public image URLs for the remote MCP service."""
 import json
-import sys
-import urllib.parse
 import urllib.request
 
 REPO = "lzy20050307-max/gege-stickers"
 MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif"}
 MAX_IMAGE = 5 * 1024 * 1024
-STICKER_WIDGET_URI = "ui://widget/gege-sticker.html"
 
 
 def get(url, accept="application/json"):
@@ -42,25 +38,8 @@ TOOLS = [
     {"name": "list_stickers", "description": "取得公開 GitHub 倉庫中最新的表情包圖片路徑清單。", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
     {
         "name": "show_sticker",
-        "title": "顯示表情包",
-        "description": "依實際存在的相對路徑或唯一檔名，從 jsDelivr 取回表情包，直接以圖片內容回傳。",
+        "description": "依實際存在的相對路徑或唯一檔名，回傳對應的 jsDelivr 公開圖片 URL。",
         "inputSchema": {"type": "object", "properties": {"filename": {"type": "string", "description": "圖片檔名或倉庫內相對路徑"}}, "required": ["filename"], "additionalProperties": False},
-        "outputSchema": {
-            "type": "object",
-            "properties": {
-                "filename": {"type": "string"},
-                "url": {"type": "string"},
-                "mimeType": {"type": "string"},
-            },
-            "required": ["filename", "url", "mimeType"],
-            "additionalProperties": False,
-        },
-        "_meta": {
-            "ui": {"resourceUri": STICKER_WIDGET_URI},
-            "openai/outputTemplate": STICKER_WIDGET_URI,
-            "openai/toolInvocation/invoking": "正在取得表情包…",
-            "openai/toolInvocation/invoked": "表情包已顯示",
-        },
     },
 ]
 
@@ -80,16 +59,5 @@ def call(name, args):
     if len(matches) != 1:
         raise ValueError(f"找不到唯一圖片；符合的路徑：{matches}")
     path = matches[0]
-    encoded = "/".join(urllib.parse.quote(part, safe="") for part in path.split("/"))
-    url = f"https://cdn.jsdelivr.net/gh/{REPO}@{urllib.parse.quote(branch, safe='')}/{encoded}"
-    data = get(url, "image/*")
-    if not data or len(data) > MAX_IMAGE:
-        raise ValueError("圖片為空或超過 5 MiB。")
-    mime = next(mime for ext, mime in MIMES.items() if path.lower().endswith(ext))
-    return {
-        "structuredContent": {"filename": path, "url": url, "mimeType": mime},
-        "content": [
-            {"type": "text", "text": json.dumps({"filename": path, "url": url}, ensure_ascii=False)},
-            {"type": "image", "data": base64.b64encode(data).decode("ascii"), "mimeType": mime},
-        ],
-    }
+    url = f"https://cdn.jsdelivr.net/gh/{REPO}@{branch}/{path}"
+    return {"content": [{"type": "text", "text": url}]}
