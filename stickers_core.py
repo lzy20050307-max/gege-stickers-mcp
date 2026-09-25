@@ -9,6 +9,7 @@ import urllib.request
 REPO = "lzy20050307-max/gege-stickers"
 MIMES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp", ".avif": "image/avif"}
 MAX_IMAGE = 5 * 1024 * 1024
+STICKER_WIDGET_URI = "ui://widget/gege-sticker.html"
 
 
 def get(url, accept="application/json"):
@@ -39,7 +40,28 @@ def catalog():
 
 TOOLS = [
     {"name": "list_stickers", "description": "取得公開 GitHub 倉庫中最新的表情包圖片路徑清單。", "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False}},
-    {"name": "show_sticker", "description": "依實際存在的相對路徑或唯一檔名，從 jsDelivr 取回表情包，直接以圖片內容回傳。", "inputSchema": {"type": "object", "properties": {"filename": {"type": "string", "description": "圖片檔名或倉庫內相對路徑"}}, "required": ["filename"], "additionalProperties": False}},
+    {
+        "name": "show_sticker",
+        "title": "顯示表情包",
+        "description": "依實際存在的相對路徑或唯一檔名，從 jsDelivr 取回表情包，直接以圖片內容回傳。",
+        "inputSchema": {"type": "object", "properties": {"filename": {"type": "string", "description": "圖片檔名或倉庫內相對路徑"}}, "required": ["filename"], "additionalProperties": False},
+        "outputSchema": {
+            "type": "object",
+            "properties": {
+                "filename": {"type": "string"},
+                "url": {"type": "string"},
+                "mimeType": {"type": "string"},
+            },
+            "required": ["filename", "url", "mimeType"],
+            "additionalProperties": False,
+        },
+        "_meta": {
+            "ui": {"resourceUri": STICKER_WIDGET_URI},
+            "openai/outputTemplate": STICKER_WIDGET_URI,
+            "openai/toolInvocation/invoking": "正在取得表情包…",
+            "openai/toolInvocation/invoked": "表情包已顯示",
+        },
+    },
 ]
 
 
@@ -64,5 +86,10 @@ def call(name, args):
     if not data or len(data) > MAX_IMAGE:
         raise ValueError("圖片為空或超過 5 MiB。")
     mime = next(mime for ext, mime in MIMES.items() if path.lower().endswith(ext))
-    return {"content": [{"type": "text", "text": json.dumps({"filename": path, "url": url}, ensure_ascii=False)}, {"type": "image", "data": base64.b64encode(data).decode("ascii"), "mimeType": mime}]}
-
+    return {
+        "structuredContent": {"filename": path, "url": url, "mimeType": mime},
+        "content": [
+            {"type": "text", "text": json.dumps({"filename": path, "url": url}, ensure_ascii=False)},
+            {"type": "image", "data": base64.b64encode(data).decode("ascii"), "mimeType": mime},
+        ],
+    }

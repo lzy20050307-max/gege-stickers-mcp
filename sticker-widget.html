@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>哥哥表情包</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      html,
+      body {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 1px;
+        margin: 0;
+        padding: 0;
+        background: transparent;
+      }
+
+      main {
+        display: flex;
+        width: 100%;
+        justify-content: center;
+      }
+
+      img {
+        display: none;
+        width: auto;
+        max-width: 100%;
+        max-height: min(70vh, 720px);
+        object-fit: contain;
+        border-radius: 12px;
+      }
+
+      #status {
+        padding: 8px 12px;
+        color: CanvasText;
+        font-size: 14px;
+        opacity: 0.72;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img id="sticker" alt="哥哥表情包" />
+      <div id="status" role="status" aria-live="polite">圖片載入中…</div>
+    </main>
+
+    <script type="module">
+      const image = document.querySelector("#sticker");
+      const status = document.querySelector("#status");
+
+      const render = (result) => {
+        const data = result?.structuredContent ?? result ?? {};
+        if (typeof data.url !== "string" || !data.url.startsWith("https://cdn.jsdelivr.net/")) {
+          return;
+        }
+
+        image.alt = typeof data.filename === "string" ? data.filename : "哥哥表情包";
+        image.onload = () => {
+          status.hidden = true;
+          image.style.display = "block";
+        };
+        image.onerror = () => {
+          image.style.display = "none";
+          status.hidden = false;
+          status.textContent = "圖片載入失敗";
+        };
+        image.src = data.url;
+      };
+
+      if (window.openai?.toolOutput) {
+        render(window.openai.toolOutput);
+      }
+
+      let rpcId = 0;
+      const pendingRequests = new Map();
+
+      const rpcNotify = (method, params) => {
+        window.parent.postMessage({ jsonrpc: "2.0", method, params }, "*");
+      };
+
+      const rpcRequest = (method, params) =>
+        new Promise((resolve, reject) => {
+          const id = ++rpcId;
+          pendingRequests.set(id, { resolve, reject });
+          window.parent.postMessage({ jsonrpc: "2.0", id, method, params }, "*");
+        });
+
+      window.addEventListener(
+        "message",
+        (event) => {
+          if (event.source !== window.parent) return;
+          const message = event.data;
+          if (!message || message.jsonrpc !== "2.0") return;
+
+          if (typeof message.id === "number") {
+            const pending = pendingRequests.get(message.id);
+            if (!pending) return;
+            pendingRequests.delete(message.id);
+            if (message.error) pending.reject(message.error);
+            else pending.resolve(message.result);
+            return;
+          }
+
+          if (message.method === "ui/notifications/tool-result") {
+            render(message.params);
+          }
+        },
+        { passive: true }
+      );
+
+      const initializeBridge = async () => {
+        try {
+          await rpcRequest("ui/initialize", {
+            appInfo: { name: "gege-sticker-widget", version: "0.1.0" },
+            appCapabilities: {},
+            protocolVersion: "2026-01-26",
+          });
+          rpcNotify("ui/notifications/initialized", {});
+        } catch (error) {
+          console.error("MCP Apps bridge initialization failed", error);
+        }
+      };
+
+      initializeBridge();
+    </script>
+  </body>
+</html>
